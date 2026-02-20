@@ -1,0 +1,8 @@
+# Environment files
+.env
+.env.*
+
+# Optional extras (recommended)
+node_modules/
+dist/
+build/
