@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_MODEL: str = "claude-3-5-haiku-20241022"
 
+    # ── CORS ─────────────────────────────────────────────────────────────────
+    # Comma-separated list of allowed origins.
+    # Dev default allows localhost. Production: set in .env.prod
+    ALLOWED_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
+
     # ── Economy ───────────────────────────────────────────────────────────────
     DEFAULT_BLUE_COINS: int = 1000
     MAX_PORTFOLIO_RISK_PCT: int = 50

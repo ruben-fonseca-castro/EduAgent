@@ -1,8 +1,43 @@
-# Environment files
+# ── Secrets (NEVER commit) ────────────────────────────────────────────────────
 .env
 .env.*
+!.env.*.example        # Allow example files to be committed
+backend/.env
+backend/.env.prod
+.env.prod
 
-# Optional extras (recommended)
+# ── Oracle / OCI credentials ─────────────────────────────────────────────────
+.oci/
+*.pem
+*.key
+
+# ── TLS certs ────────────────────────────────────────────────────────────────
+nginx/certs/
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.venv/
+venv/
+env/
+
+# ── SQLite dev DB ─────────────────────────────────────────────────────────────
+*.db
+*.sqlite3
+
+# ── Node / Next.js ────────────────────────────────────────────────────────────
 node_modules/
+frontend/.next/
+frontend/out/
+frontend/.vercel/
 dist/
 build/
+
+# ── Data dirs (persisted via Docker volumes in production) ────────────────────
+backend/uploads/
+backend/data/
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+.DS_Store

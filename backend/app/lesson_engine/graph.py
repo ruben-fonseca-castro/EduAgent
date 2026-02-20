@@ -38,7 +38,7 @@ def _route_after_content(state: LessonState) -> Literal["generate_figures", "ass
 def _route_after_review(state: LessonState) -> Literal["generate_content", "__end__"]:
     review = state.get("review_result")
     iteration = state.get("iteration_count", 0)
-    if review and not review.passed and iteration < 3:
+    if review and not review.passed and iteration < 1:  # Max 1 iteration
         return "generate_content"
     return "__end__"
 

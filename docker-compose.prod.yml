@@ -1,0 +1,100 @@
+version: "3.9"
+
+# ============================================================
+#  Astra — Production Docker Compose
+#  Oracle 23ai Free DB + FastAPI backend + Nginx reverse proxy
+#  Frontend is deployed separately to Netlify (see DEPLOY.md)
+# ============================================================
+
+services:
+
+  # ── Oracle 23ai Free ─────────────────────────────────────
+  oracle-db:
+    image: container-registry.oracle.com/database/free:latest
+    container_name: astra-oracle-db
+    restart: unless-stopped
+    environment:
+      ORACLE_PWD: ${ORACLE_DB_PASSWORD}
+      ORACLE_CHARACTERSET: AL32UTF8
+    ports:
+      - "1521:1521"   # Keep closed in firewall; only backend needs it internally
+    volumes:
+      - oracle_data:/opt/oracle/oradata
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - |
+          echo 'SELECT 1 FROM DUAL;' | sqlplus -s system/${ORACLE_DB_PASSWORD}@localhost:1521/FREEPDB1 || exit 1
+      interval: 30s
+      timeout: 15s
+      retries: 15
+      start_period: 180s   # Oracle takes ~2-3 min on first boot
+
+  # ── FastAPI Backend ───────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: astra-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env.prod
+    environment:
+      # Override DB URL to use the Oracle container (internal docker network)
+      DATABASE_URL: oracle+oracledb://system:${ORACLE_DB_PASSWORD}@oracle-db:1521/?service_name=FREEPDB1
+    depends_on:
+      oracle-db:
+        condition: service_healthy
+    volumes:
+      # Persist uploads, chroma vectors, generated lessons OUTSIDE the container
+      - astra_uploads:/app/uploads
+      - astra_chroma:/app/data/chroma_db
+      - astra_student_ctx:/app/data/student_context
+      - astra_lessons:/app/data/generated_lessons
+      # Mount OCI config so GenAI signing works in production
+      - ${OCI_CONFIG_DIR:-~/.oci}:/root/.oci:ro
+    expose:
+      - "8000"          # Not published to host; Nginx proxies internally
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ── Nginx Reverse Proxy ───────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: astra-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      # TLS certs (populated by Certbot — see DEPLOY.md)
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - certbot_www:/var/www/certbot:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # ── Certbot (Let's Encrypt — free TLS) ───────────────────
+  certbot:
+    image: certbot/certbot:latest
+    container_name: astra-certbot
+    volumes:
+      - ./nginx/certs:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    # Run manually: docker compose -f docker-compose.prod.yml run --rm certbot certonly ...
+    # See DEPLOY.md for the exact command
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done'"
+
+volumes:
+  oracle_data:
+  astra_uploads:
+  astra_chroma:
+  astra_student_ctx:
+  astra_lessons:
+  certbot_www:

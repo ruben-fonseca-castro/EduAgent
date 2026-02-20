@@ -1,36 +1,50 @@
-"""Campus Prediction Market — FastAPI Application Entry Point."""
+"""Astra — FastAPI Application Entry Point."""
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
+from app.config import settings
 from app.middleware.rate_limit import limiter
 from app.routers import auth, classes, markets, trades, voice, analytics, mcp, explain, courses, classroom, student_profile, lessons
 from app.database import engine, Base
 from app.services.ai_client import ai_provider_name, ai_health_check
 
-# Create all tables on startup (dev mode — use Alembic migrations in production)
+# Create all tables on startup
 Base.metadata.create_all(bind=engine)
 
 # Safe column migrations — add new columns to existing tables without data loss
 def _add_column_if_missing(table: str, column: str, col_type: str):
-    """Add a column to a SQLite table if it doesn't already exist."""
-    from sqlalchemy import text, inspect
+    """Add a column to an existing table if it doesn't already exist (SQLite + Oracle safe)."""
+    from sqlalchemy import text
+    is_sqlite = settings.DATABASE_URL.startswith("sqlite")
     with engine.connect() as conn:
-        result = conn.execute(text(f"PRAGMA table_info({table})"))
-        existing_cols = {row[1] for row in result}
+        if is_sqlite:
+            result = conn.execute(text(f"PRAGMA table_info({table})"))
+            existing_cols = {row[1] for row in result}
+        else:
+            # Oracle: query user_tab_columns
+            result = conn.execute(
+                text("SELECT column_name FROM user_tab_columns WHERE table_name = :t"),
+                {"t": table.upper()}
+            )
+            existing_cols = {row[0].lower() for row in result}
         if column not in existing_cols:
-            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
+            conn.execute(text(f"ALTER TABLE {table} ADD {column} {col_type}"))
             conn.commit()
             print(f"  ✓ Added column {table}.{column}")
 
 _add_column_if_missing("classroom_sessions", "lesson_id", "VARCHAR(36)")
 
+# ── CORS origins from env (supports dev localhost + production domain) ──────
+_cors_origins = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()]
+
 app = FastAPI(
-    title="Campus Prediction Market",
-    description="Educational prediction market platform.",
-    version="0.1.0",
+    title="Astra",
+    description="AI-powered adaptive learning platform.",
+    version="1.0.0",
+    # Hide docs in production by setting docs_url=None via env if desired
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -39,10 +53,10 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS — allow frontend dev server
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
