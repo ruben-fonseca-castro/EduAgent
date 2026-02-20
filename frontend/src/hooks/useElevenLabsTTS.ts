@@ -75,7 +75,7 @@ export function useElevenLabsTTS() {
   }, []);
 
   const speak = useCallback(async (text: string, persona: string) => {
-    const apiKey = process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY;
+    const apiKey = process.env.ELEVENLABS_API_KEY;
     if (!apiKey || apiKey === "your_elevenlabs_api_key_here") {
       setState((s) => ({ ...s, error: "ElevenLabs API key not set in .env.local" }));
       return;

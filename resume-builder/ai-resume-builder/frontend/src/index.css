@@ -1,0 +1,148 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary-50: #EFF6FF;
+  --color-primary-100: #DBEAFE;
+  --color-primary-500: #3B82F6;
+  --color-primary-600: #2563EB;
+  --color-primary-700: #1D4ED8;
+  --color-secondary-900: #0F172A;
+  --color-secondary-800: #1E293B;
+  --color-secondary-700: #334155;
+  --color-surface: #FFFFFF;
+  --color-background: #F8FAFC;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--color-background);
+  color: var(--color-secondary-900);
+}
+
+/* ─── Invisible Inline Editing ─────────────────────────────── */
+.editable-field {
+  transition: border-color 0.2s ease;
+  border-bottom: 1.5px solid transparent;
+  border-radius: 0;
+}
+
+.editable-field:hover {
+  cursor: text;
+}
+
+.editable-field:focus {
+  border-bottom-color: rgba(156, 163, 175, 0.5);
+}
+
+/* ─── Custom Scrollbar ─────────────────────────────────────── */
+.custom-scrollbar::-webkit-scrollbar,
+.resume-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track,
+.resume-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb,
+.resume-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.12);
+  border-radius: 999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover,
+.resume-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.25);
+}
+
+@layer utilities {
+  .glass-panel {
+    @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-xl;
+  }
+
+  /* Resume page — always shows exact A4 sizing */
+  .resume-page {
+    @apply bg-white shadow-2xl mx-auto border border-gray-200;
+    width: 210mm;
+    min-height: 297mm;
+    padding: 20mm;
+    position: relative;
+  }
+}
+
+/* ─── Page Break Indicator ─────────────────────────────────── */
+.page-break-indicator {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border: none;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.page-break-indicator::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  top: -1px;
+  height: 2px;
+  background: repeating-linear-gradient(90deg,
+      #94a3b8 0px,
+      #94a3b8 6px,
+      transparent 6px,
+      transparent 12px);
+}
+
+.page-break-indicator::after {
+  content: 'Page break';
+  position: absolute;
+  right: 8px;
+  top: -10px;
+  font-size: 9px;
+  color: #94a3b8;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: white;
+  padding: 0 6px;
+}
+
+/* ─── Print Styling ────────────────────────────────────────── */
+@media print {
+  body {
+    background: white;
+    margin: 0;
+    padding: 0;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .editable-field {
+    border-bottom: none !important;
+  }
+
+  .page-break-indicator {
+    display: none;
+  }
+
+  .resume-page {
+    box-shadow: none;
+    border: none;
+    margin: 0;
+    width: 100%;
+    padding: 0;
+    page-break-after: avoid;
+    page-break-before: avoid;
+    page-break-inside: avoid;
+  }
+}

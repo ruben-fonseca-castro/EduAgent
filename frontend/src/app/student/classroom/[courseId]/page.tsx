@@ -446,7 +446,7 @@ function TeachInput({
 
   // --- ElevenLabs STT (fallback) ---
   const transcribeBlob = async (blob: Blob, baseText: string) => {
-    const apiKey = process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY;
+    const apiKey = process.env.ELEVENLABS_API_KEY;
     if (!apiKey || apiKey === "your_elevenlabs_api_key_here") {
       setSttError("ElevenLabs API key not set");
       return;
