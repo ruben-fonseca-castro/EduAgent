@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   // Falls back to localhost for local dev.
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000",
+    ELEVENLABS_API_KEY: process.env.ELEVENLABS_API_KEY || "",
   },
 };
 
