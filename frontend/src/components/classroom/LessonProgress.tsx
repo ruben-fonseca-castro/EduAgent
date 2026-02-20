@@ -28,6 +28,10 @@ export function LessonProgress({ lessonId, token, onComplete, onError }: LessonP
   const [objectives, setObjectives] = useState<string[]>([]);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const nodeIndexRef = useRef(0);
+  const onCompleteRef = useRef(onComplete);
+  const onErrorRef = useRef(onError);
+  onCompleteRef.current = onComplete;
+  onErrorRef.current = onError;
 
   useEffect(() => {
     let cancelled = false;
@@ -53,11 +57,15 @@ export function LessonProgress({ lessonId, token, onComplete, onError }: LessonP
       try {
         const lesson = await lessons.get(token, lessonId);
         if (lesson.status === "ready") {
-          if (!cancelled) onComplete();
           cancelled = true;
+          clearInterval(progressTimer);
+          if (pollingRef.current) clearInterval(pollingRef.current);
+          onCompleteRef.current();
         } else if (lesson.status === "error") {
-          if (!cancelled) onError(lesson.error_message || "Generation failed");
           cancelled = true;
+          clearInterval(progressTimer);
+          if (pollingRef.current) clearInterval(pollingRef.current);
+          onErrorRef.current(lesson.error_message || "Generation failed");
         }
         // If still generating, keep polling
       } catch {
@@ -70,7 +78,7 @@ export function LessonProgress({ lessonId, token, onComplete, onError }: LessonP
       clearInterval(progressTimer);
       if (pollingRef.current) clearInterval(pollingRef.current);
     };
-  }, [lessonId, token, onComplete, onError]);
+  }, [lessonId, token]);
 
   const currentIdx = PIPELINE_NODES.findIndex(n => n.key === currentNode);
 
