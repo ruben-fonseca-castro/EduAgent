@@ -1,0 +1,13 @@
+# ============================================================
+#  numénor.ai Frontend — Production Environment
+#  Set these as Environment Variables in Netlify's dashboard
+#  (Site → Site Configuration → Environment Variables)
+#  DO NOT commit .env.local with real values.
+# ============================================================
+
+# Your backend API URL — the Oracle VM's public IP + port
+# Example: http://152.70.123.45:8000  (no trailing slash)
+NEXT_PUBLIC_API_URL=http://YOUR_VM_PUBLIC_IP:8000
+
+# ElevenLabs voice API key
+NEXT_PUBLIC_ELEVENLABS_API_KEY=YOUR_ELEVENLABS_KEY

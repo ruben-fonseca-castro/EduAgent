@@ -284,9 +284,14 @@ async def upload_resume(
     # Extract text
     try:
         if file.filename.lower().endswith(".pdf"):
-            from pypdf import PdfReader
-            reader = PdfReader(str(file_path))
-            text = "\n".join(page.extract_text() or "" for page in reader.pages)
+            import pdfplumber
+            with pdfplumber.open(str(file_path)) as pdf:
+                pages_text = []
+                for page in pdf.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        pages_text.append(page_text)
+                text = "\n".join(pages_text)
         elif file.filename.lower().endswith((".docx", ".doc")):
             import docx
             doc = docx.Document(str(file_path))

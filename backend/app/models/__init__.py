@@ -16,6 +16,7 @@ from app.models.classroom_session import ClassroomSession
 from app.models.student_profile import StudentProfile
 from app.models.generated_lesson import GeneratedLesson
 from app.models.performance_report import PerformanceReport
+from app.models.resume_state import ResumeBuilderState
 
 __all__ = [
     "User",
@@ -35,4 +36,5 @@ __all__ = [
     "StudentProfile",
     "GeneratedLesson",
     "PerformanceReport",
+    "ResumeBuilderState",
 ]

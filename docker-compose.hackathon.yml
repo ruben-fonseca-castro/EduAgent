@@ -1,0 +1,42 @@
+version: "3.9"
+
+# ============================================================
+#  numénor.ai — Hackathon Production Compose
+#  Simple: FastAPI + SQLite (volume-backed) + NO nginx/Oracle
+#  Backend exposed directly on port 8000
+#  Frontend → Netlify (separate)
+# ============================================================
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: numenorai-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env.prod
+    ports:
+      - "8000:8000"       # Exposed directly (no nginx needed)
+    volumes:
+      # All persistent data outside the container
+      - numenor_uploads:/app/uploads
+      - numenor_chroma:/app/data/chroma_db
+      - numenor_student_ctx:/app/data/student_context
+      - numenor_lessons:/app/data/generated_lessons
+      - numenor_db:/app/data/db           # SQLite database file
+      # OCI credentials for Oracle GenAI (mounted read-only)
+      - /root/.oci:/root/.oci:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+
+volumes:
+  numenor_uploads:
+  numenor_chroma:
+  numenor_student_ctx:
+  numenor_lessons:
+  numenor_db:

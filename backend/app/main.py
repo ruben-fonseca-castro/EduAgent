@@ -1,4 +1,4 @@
-"""Astra — FastAPI Application Entry Point."""
+"""numénor.ai — FastAPI Application Entry Point."""
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,7 +7,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
 from app.middleware.rate_limit import limiter
-from app.routers import auth, classes, markets, trades, voice, analytics, mcp, explain, courses, classroom, student_profile, lessons
+from app.routers import auth, classes, markets, trades, voice, analytics, mcp, explain, courses, classroom, student_profile, lessons, resume_builder
 from app.database import engine, Base
 from app.services.ai_client import ai_provider_name, ai_health_check
 
@@ -41,7 +41,7 @@ _add_column_if_missing("classroom_sessions", "lesson_id", "VARCHAR(36)")
 _cors_origins = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()]
 
 app = FastAPI(
-    title="Astra",
+    title="numénor.ai",
     description="AI-powered adaptive learning platform.",
     version="1.0.0",
     # Hide docs in production by setting docs_url=None via env if desired
@@ -75,6 +75,7 @@ app.include_router(courses.router)
 app.include_router(classroom.router)
 app.include_router(student_profile.router)
 app.include_router(lessons.router)
+app.include_router(resume_builder.router)
 
 
 @app.on_event("startup")

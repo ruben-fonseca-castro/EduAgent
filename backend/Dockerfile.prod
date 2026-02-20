@@ -17,7 +17,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Create data dirs so volume mounts work correctly
-RUN mkdir -p /app/uploads /app/data/chroma_db /app/data/student_context /app/data/generated_lessons
+RUN mkdir -p /app/uploads /app/data/chroma_db /app/data/student_context /app/data/generated_lessons /app/data/db
 
 EXPOSE 8000
 
