@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EduAgent — Interactive Lesson Planner</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    .card { @apply bg-white rounded-2xl shadow-lg border border-gray-100; }
+    .btn-primary { @apply bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-3 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed; }
+    .btn-secondary { @apply bg-white hover:bg-gray-50 text-gray-700 font-medium px-4 py-2 rounded-lg border border-gray-200 transition-all; }
+
+    /* SSE log */
+    #sse-log { font-family: monospace; font-size: 0.8rem; }
+    .log-node_start { color: #6366f1; }
+    .log-node_end { color: #10b981; }
+    .log-token { color: #6b7280; }
+    .log-figure { color: #f59e0b; }
+    .log-complete { color: #059669; font-weight: 700; }
+    .log-error { color: #ef4444; font-weight: 700; }
+
+    /* Spinner */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { animation: spin 1s linear infinite; }
+
+    /* Drag & drop */
+    .drop-zone.drag-over { border-color: #6366f1; background: #eef2ff; }
+
+    /* Tab */
+    .tab-btn.active { background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); color: #4f46e5; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+  <!-- ── Header ─────────────────────────────────────────────────────────── -->
+  <header class="gradient-bg text-white py-10 px-4">
+    <div class="max-w-4xl mx-auto text-center">
+      <div class="text-5xl mb-3">🎓</div>
+      <h1 class="text-4xl font-bold mb-2">EduAgent</h1>
+      <p class="text-indigo-200 text-lg">AI-powered interactive lesson generator. Type a topic or upload a PDF.</p>
+    </div>
+  </header>
+
+  <!-- ── Main ───────────────────────────────────────────────────────────── -->
+  <main class="max-w-4xl mx-auto px-4 py-8 space-y-6">
+
+    <!-- ── Input Card ───────────────────────────────────────────────────── -->
+    <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+
+      <!-- Tab selector -->
+      <div class="flex bg-gray-100 rounded-xl p-1 mb-6 w-fit">
+        <button onclick="switchTab('prompt')" id="tab-prompt" class="tab-btn active px-5 py-2 rounded-lg text-sm font-medium transition-all">
+          ✏️ Topic / Prompt
+        </button>
+        <button onclick="switchTab('pdf')" id="tab-pdf" class="tab-btn px-5 py-2 rounded-lg text-sm font-medium transition-all">
+          📄 Upload PDF
+        </button>
+      </div>
+
+      <!-- Prompt tab -->
+      <div id="panel-prompt">
+        <label class="block text-sm font-semibold text-gray-700 mb-2">What do you want to learn?</label>
+        <textarea
+          id="prompt-input"
+          rows="4"
+          placeholder="e.g. Teach me Newton's second law with real-world examples&#10;or&#10;Explain how neural networks learn using backpropagation"
+          class="w-full border border-gray-200 rounded-xl px-4 py-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
+        ></textarea>
+      </div>
+
+      <!-- PDF tab -->
+      <div id="panel-pdf" class="hidden">
+        <label class="block text-sm font-semibold text-gray-700 mb-2">Upload course material PDFs</label>
+        <div
+          id="drop-zone"
+          class="drop-zone border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-indigo-400 transition-colors"
+          onclick="document.getElementById('file-input').click()"
+          ondragover="handleDragOver(event)"
+          ondragleave="handleDragLeave(event)"
+          ondrop="handleDrop(event)"
+        >
+          <div class="text-4xl mb-2">📁</div>
+          <p class="text-gray-500">Drag & drop PDFs here, or click to browse</p>
+          <p class="text-xs text-gray-400 mt-1">PDF and TXT files supported</p>
+          <input type="file" id="file-input" multiple accept=".pdf,.txt" class="hidden" onchange="handleFileSelect(event)" />
+        </div>
+        <div id="file-list" class="mt-3 space-y-2"></div>
+      </div>
+
+      <!-- Student selector -->
+      <div class="mt-5 flex items-end gap-4">
+        <div class="flex-1">
+          <label class="block text-sm font-semibold text-gray-700 mb-2">
+            Student Profile <span class="font-normal text-gray-400">(optional — for personalization)</span>
+          </label>
+          <select id="student-select" class="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white">
+            <option value="">— No student profile —</option>
+          </select>
+        </div>
+        <button onclick="openStudentModal()" class="btn-secondary whitespace-nowrap">
+          + New Student
+        </button>
+      </div>
+
+      <!-- Generate button -->
+      <div class="mt-5 flex justify-end">
+        <button id="generate-btn" onclick="generateLesson()" class="btn-primary">
+          ✨ Generate Lesson
+        </button>
+      </div>
+    </div>
+
+    <!-- ── Progress Card ─────────────────────────────────────────────────── -->
+    <div id="progress-card" class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hidden">
+      <div class="flex items-center gap-3 mb-4">
+        <svg id="spinner" class="spinner w-5 h-5 text-indigo-500" viewBox="0 0 24 24" fill="none">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+        </svg>
+        <span id="status-text" class="font-semibold text-gray-700">Starting...</span>
+      </div>
+
+      <!-- Node pipeline -->
+      <div id="pipeline" class="flex gap-2 flex-wrap mb-4">
+        <!-- Populated by JS -->
+      </div>
+
+      <!-- SSE log (last 8 lines) -->
+      <div class="bg-gray-900 rounded-xl p-4 h-40 overflow-y-auto" id="sse-log"></div>
+    </div>
+
+    <!-- ── Lesson Result Card ─────────────────────────────────────────────── -->
+    <div id="result-card" class="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl border border-green-200 p-6 hidden">
+      <div class="flex items-center gap-3 mb-4">
+        <span class="text-3xl">🎉</span>
+        <div>
+          <h2 class="text-xl font-bold text-green-900">Your lesson is ready!</h2>
+          <p class="text-green-700 text-sm" id="result-subtitle"></p>
+        </div>
+      </div>
+      <a id="lesson-link" href="#" target="_blank" class="inline-block bg-green-600 hover:bg-green-700 text-white font-semibold px-6 py-3 rounded-xl transition-all">
+        📖 Open Lesson
+      </a>
+    </div>
+
+    <!-- ── Past Lessons ───────────────────────────────────────────────────── -->
+    <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-bold text-gray-800">📚 Past Lessons</h2>
+        <button onclick="loadLessons()" class="btn-secondary text-xs">Refresh</button>
+      </div>
+      <div id="lessons-list">
+        <p class="text-gray-400 text-sm">No lessons yet. Generate your first one!</p>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ── Student Creation Modal ─────────────────────────────────────────── -->
+  <div id="student-modal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center hidden" onclick="closeStudentModal(event)">
+    <div class="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl" onclick="event.stopPropagation()">
+      <h2 class="text-xl font-bold text-gray-800 mb-4">Create Student Profile</h2>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+          <input id="student-name" type="text" placeholder="e.g. Alex Johnson"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Grade Level</label>
+          <select id="student-grade" class="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white">
+            <option value="middle_school">Middle School</option>
+            <option value="high_school" selected>High School</option>
+            <option value="undergraduate">Undergraduate</option>
+            <option value="professional">Professional</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Subjects of Interest (comma-separated)</label>
+          <input id="student-subjects" type="text" placeholder="Math, Physics, Computer Science"
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
+          <textarea id="student-notes" rows="2" placeholder="Learning preferences, prior knowledge..."
+            class="w-full border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"></textarea>
+        </div>
+      </div>
+      <div class="flex gap-3 mt-6">
+        <button onclick="createStudent()" class="flex-1 btn-primary text-center">Create Student</button>
+        <button onclick="closeStudentModal()" class="flex-1 btn-secondary text-center">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── State ────────────────────────────────────────────────────────────────
+    let currentTab = 'prompt';
+    let selectedFiles = [];
+    let currentLessonId = null;
+    let sseEventSource = null;
+
+    const NODES = [
+      { id: 'parse_input', label: 'Parse' },
+      { id: 'plan_lesson', label: 'Plan' },
+      { id: 'retrieve_student_context', label: 'RAG' },
+      { id: 'generate_content', label: 'Generate' },
+      { id: 'generate_figures', label: 'Figures' },
+      { id: 'assemble_html', label: 'Assemble' },
+      { id: 'review_lesson', label: 'Review' },
+    ];
+
+    // ── Tabs ─────────────────────────────────────────────────────────────────
+    function switchTab(tab) {
+      currentTab = tab;
+      document.getElementById('panel-prompt').classList.toggle('hidden', tab !== 'prompt');
+      document.getElementById('panel-pdf').classList.toggle('hidden', tab !== 'pdf');
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.getElementById(`tab-${tab}`).classList.add('active');
+    }
+
+    // ── Drag & Drop ───────────────────────────────────────────────────────────
+    function handleDragOver(e) {
+      e.preventDefault();
+      document.getElementById('drop-zone').classList.add('drag-over');
+    }
+    function handleDragLeave(e) {
+      document.getElementById('drop-zone').classList.remove('drag-over');
+    }
+    function handleDrop(e) {
+      e.preventDefault();
+      document.getElementById('drop-zone').classList.remove('drag-over');
+      handleFiles(Array.from(e.dataTransfer.files));
+    }
+    function handleFileSelect(e) {
+      handleFiles(Array.from(e.target.files));
+    }
+    function handleFiles(files) {
+      selectedFiles = [...selectedFiles, ...files];
+      renderFileList();
+    }
+    function renderFileList() {
+      const container = document.getElementById('file-list');
+      container.innerHTML = selectedFiles.map((f, i) => `
+        <div class="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 text-sm">
+          <span class="text-gray-700">📄 ${f.name}</span>
+          <button onclick="removeFile(${i})" class="text-red-400 hover:text-red-600 text-xs">✕</button>
+        </div>
+      `).join('');
+    }
+    function removeFile(i) {
+      selectedFiles.splice(i, 1);
+      renderFileList();
+    }
+
+    // ── Pipeline rendering ────────────────────────────────────────────────────
+    function renderPipeline(activeNode = null, completedNodes = new Set()) {
+      const pipeline = document.getElementById('pipeline');
+      pipeline.innerHTML = NODES.map(n => {
+        let cls = 'px-3 py-1 rounded-full text-xs font-medium border ';
+        if (n.id === activeNode) cls += 'bg-indigo-600 text-white border-indigo-600 animate-pulse';
+        else if (completedNodes.has(n.id)) cls += 'bg-green-100 text-green-700 border-green-300';
+        else cls += 'bg-gray-100 text-gray-400 border-gray-200';
+        return `<span class="${cls}">${n.label}</span>`;
+      }).join('');
+    }
+
+    // ── SSE log ────────────────────────────────────────────────────────────────
+    const MAX_LOG_LINES = 8;
+    let logLines = [];
+    function appendLog(text, cls = '') {
+      logLines.push({ text, cls });
+      if (logLines.length > MAX_LOG_LINES) logLines.shift();
+      const el = document.getElementById('sse-log');
+      el.innerHTML = logLines.map(l => `<div class="log-${l.cls}">${escapeHtml(l.text)}</div>`).join('');
+      el.scrollTop = el.scrollHeight;
+    }
+    function escapeHtml(t) {
+      return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    // ── Generate lesson ────────────────────────────────────────────────────────
+    async function generateLesson() {
+      const btn = document.getElementById('generate-btn');
+      btn.disabled = true;
+
+      const studentId = document.getElementById('student-select').value || null;
+
+      document.getElementById('progress-card').classList.remove('hidden');
+      document.getElementById('result-card').classList.add('hidden');
+      logLines = [];
+      const completedNodes = new Set();
+      renderPipeline(null, completedNodes);
+
+      let lessonId;
+      try {
+        if (currentTab === 'prompt') {
+          const prompt = document.getElementById('prompt-input').value.trim();
+          if (!prompt) { alert('Please enter a topic or prompt.'); btn.disabled = false; return; }
+
+          const res = await fetch('/api/lessons/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt, student_id: studentId }),
+          });
+          const data = await res.json();
+          lessonId = data.lesson_id;
+        } else {
+          if (!selectedFiles.length) { alert('Please select at least one file.'); btn.disabled = false; return; }
+          const fd = new FormData();
+          selectedFiles.forEach(f => fd.append('files', f));
+          if (studentId) fd.append('student_id', studentId);
+
+          const res = await fetch('/api/lessons/generate-from-pdf-upload', {
+            method: 'POST',
+            body: fd,
+          });
+          const data = await res.json();
+          lessonId = data.lesson_id;
+        }
+      } catch (e) {
+        appendLog('Error: ' + e.message, 'error');
+        btn.disabled = false;
+        return;
+      }
+
+      currentLessonId = lessonId;
+
+      // Connect to SSE stream
+      sseEventSource = new EventSource(`/api/lessons/${lessonId}/stream`);
+
+      sseEventSource.onmessage = function(e) {
+        const event = JSON.parse(e.data);
+        const type = event.type;
+
+        if (type === 'heartbeat') return;
+
+        if (type === 'node_start') {
+          renderPipeline(event.node, completedNodes);
+          document.getElementById('status-text').textContent = `Running: ${event.node.replace(/_/g, ' ')}...`;
+          appendLog(`▶ ${event.node}`, 'node_start');
+        } else if (type === 'node_end') {
+          completedNodes.add(event.node);
+          renderPipeline(null, completedNodes);
+          appendLog(`✓ ${event.node} (${event.took_ms}ms)`, 'node_end');
+        } else if (type === 'token') {
+          // Show a brief snippet of the streaming token
+          appendLog(event.content.substring(0, 60), 'token');
+        } else if (type === 'figure_generated') {
+          appendLog(`📊 Figure: ${event.title}`, 'figure');
+        } else if (type === 'complete') {
+          sseEventSource.close();
+          document.getElementById('spinner').classList.add('hidden');
+          document.getElementById('status-text').textContent = 'Complete!';
+          renderPipeline(null, new Set(NODES.map(n => n.id)));
+          appendLog('✅ Lesson generation complete!', 'complete');
+
+          document.getElementById('result-card').classList.remove('hidden');
+          document.getElementById('lesson-link').href = event.html_url;
+          document.getElementById('result-subtitle').textContent = `Lesson ID: ${event.lesson_id}`;
+          btn.disabled = false;
+          loadLessons();
+        } else if (type === 'error') {
+          sseEventSource.close();
+          appendLog('❌ Error: ' + event.message, 'error');
+          document.getElementById('status-text').textContent = 'Error occurred';
+          document.getElementById('spinner').classList.add('hidden');
+          btn.disabled = false;
+        }
+      };
+
+      sseEventSource.onerror = function() {
+        appendLog('Connection lost', 'error');
+        btn.disabled = false;
+      };
+    }
+
+    // ── Students ──────────────────────────────────────────────────────────────
+    async function loadStudents() {
+      try {
+        const res = await fetch('/api/students/');
+        const students = await res.json();
+        const sel = document.getElementById('student-select');
+        // Keep first option
+        sel.innerHTML = '<option value="">— No student profile —</option>';
+        students.forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = s.student_id;
+          opt.textContent = `${s.name} (${s.grade.replace('_', ' ')})`;
+          sel.appendChild(opt);
+        });
+      } catch(e) {}
+    }
+
+    function openStudentModal() {
+      document.getElementById('student-modal').classList.remove('hidden');
+    }
+    function closeStudentModal(e) {
+      if (!e || e.target === document.getElementById('student-modal')) {
+        document.getElementById('student-modal').classList.add('hidden');
+      }
+    }
+
+    async function createStudent() {
+      const name = document.getElementById('student-name').value.trim();
+      if (!name) { alert('Please enter a name.'); return; }
+
+      const grade = document.getElementById('student-grade').value;
+      const subjects = document.getElementById('student-subjects').value
+        .split(',').map(s => s.trim()).filter(Boolean);
+      const notes = document.getElementById('student-notes').value.trim();
+
+      try {
+        const res = await fetch('/api/students/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, grade, subjects, notes }),
+        });
+        const student = await res.json();
+        closeStudentModal();
+        await loadStudents();
+        document.getElementById('student-select').value = student.student_id;
+        // Clear form
+        ['student-name','student-subjects','student-notes'].forEach(id => {
+          document.getElementById(id).value = '';
+        });
+      } catch(e) {
+        alert('Failed to create student: ' + e.message);
+      }
+    }
+
+    // ── Past Lessons ──────────────────────────────────────────────────────────
+    async function loadLessons() {
+      try {
+        const res = await fetch('/api/lessons/');
+        const lessons = await res.json();
+        const container = document.getElementById('lessons-list');
+        if (!lessons.length) {
+          container.innerHTML = '<p class="text-gray-400 text-sm">No lessons yet.</p>';
+          return;
+        }
+        container.innerHTML = lessons.slice(0, 10).map(l => `
+          <div class="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+            <div>
+              <a href="${l.html_url}" target="_blank" class="text-indigo-600 hover:text-indigo-800 font-medium text-sm">
+                ${escapeHtml(l.title)}
+              </a>
+              <div class="text-xs text-gray-400">${l.subject} • ${l.grade_level.replace('_',' ')} • ${l.duration_minutes}min</div>
+            </div>
+            <span class="text-xs text-gray-400">${new Date(l.created_at).toLocaleDateString()}</span>
+          </div>
+        `).join('');
+      } catch(e) {}
+    }
+
+    // ── Init ──────────────────────────────────────────────────────────────────
+    loadStudents();
+    loadLessons();
+  </script>
+
+</body>
+</html>
