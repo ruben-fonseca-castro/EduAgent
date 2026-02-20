@@ -4,25 +4,28 @@ from typing import Annotated, Optional
 
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
 
 
 # ── Pydantic models (for structured LLM output) ───────────────────────────────
 
 class LessonSectionSchema(BaseModel):
+    """Schema for a single section within a lesson plan. This must be a JSON object, not a string."""
     title: str
     content_type: str  # "text" | "equation" | "code_example" | "exercise"
     description: str
 
 
 class FigureRequest(BaseModel):
+    """Schema for requesting a figure generation. This must be a JSON object, not a string."""
     type: str  # "plotly" | "mermaid" | "mathjax"
     description: str
     section_index: int
 
 
 class LessonPlanSchema(BaseModel):
+    """Structured lesson plan with sections and figure requests."""
     title: str
     grade_level: str  # "middle_school" | "high_school" | "undergraduate" | "professional"
     subject: str
@@ -30,11 +33,12 @@ class LessonPlanSchema(BaseModel):
     sections: list[LessonSectionSchema]
     needs_rag: bool
     needs_figures: bool
-    figure_requests: list[FigureRequest]
+    figure_requests: list[FigureRequest] = Field(default_factory=list)
     estimated_duration_minutes: int
 
 
 class ReviewResult(BaseModel):
+    """Review feedback for generated lesson content."""
     passed: bool
     issues: list[str]
 

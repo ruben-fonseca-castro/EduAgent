@@ -1,7 +1,9 @@
 # ── Stage 1: Download sentence-transformers model ────────────────────────────
 FROM python:3.11-slim AS model-downloader
 
-RUN pip install --no-cache-dir sentence-transformers==3.3.1
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+RUN uv pip install --system --no-cache sentence-transformers==3.3.1
 
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2', cache_folder='/models')"
 
@@ -9,6 +11,8 @@ RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTr
 FROM python:3.11-slim
 
 WORKDIR /app
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # System dependencies for pdfplumber and Chromadb
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -24,7 +28,7 @@ ENV SENTENCE_TRANSFORMERS_HOME=/models
 
 # Install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN uv pip install --system --no-cache -r requirements.txt
 
 # Copy application code
 COPY . .

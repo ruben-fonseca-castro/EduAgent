@@ -74,7 +74,8 @@ async def plan_lesson(state: LessonState) -> dict:
     start = time.time()
     settings = get_settings()
     llm = settings.get_llm()
-    structured_llm = llm.with_structured_output(LessonPlanSchema)
+    from langchain_core.output_parsers import PydanticOutputParser
+    parser = PydanticOutputParser(pydantic_object=LessonPlanSchema)
 
     student_hint = ""
     if state.get("student_id"):
@@ -86,12 +87,43 @@ Topic: {state['topic']}
 Content: {state['extracted_text'][:4000]}
 {student_hint}
 
-Generate a comprehensive lesson plan with 4-7 sections."""
+Generate a comprehensive lesson plan with 4-7 sections.
 
-    result: LessonPlanSchema = await structured_llm.ainvoke([
+{parser.get_format_instructions()}"""
+
+    response = await llm.ainvoke([
         SystemMessage(content=PLAN_LESSON_SYSTEM),
         HumanMessage(content=prompt),
     ])
+    
+    result: LessonPlanSchema = parser.invoke(response)
+
+    # Extract figure requests from root, or fallback to checking inside sections if Cohere nested them
+    raw_figure_requests = result.figure_requests
+    if not raw_figure_requests:
+        for i, sec in enumerate(result.sections):
+            # Check if the parsed Pydantic object unexpectedly contains figure_requests as a dict attribute 
+            # (Pydantic might drop it if strict, so we'll check the raw response if possible... wait, 
+            # if we use response.content / PydanticOutputParser, Extra fields are ignored by default.
+            # Let's adjust state.py to allow extra fields but for now we'll just extract from the parsed result)
+            pass
+            
+    # Actually, if we want to catch nested figure_requests in section dicts we need to let Pydantic model them 
+    # or just parse the JSON manually before Pydantic.
+    import json as _json
+    try:
+        raw_json_str = response.content
+        if "```json" in raw_json_str:
+             raw_json_str = raw_json_str.split("```json")[1].split("```")[0].strip()
+        parsed_raw = _json.loads(raw_json_str)
+        if not raw_figure_requests and "sections" in parsed_raw:
+            for i, sec_data in enumerate(parsed_raw["sections"]):
+                if "figure_requests" in sec_data:
+                    for fr in sec_data["figure_requests"]:
+                        fr["section_index"] = i
+                        raw_figure_requests.append(FigureRequest(**fr))
+    except Exception:
+        pass
 
     # Convert Pydantic model to TypedDict-compatible dict
     lesson_plan: LessonPlan = {
@@ -111,7 +143,7 @@ Generate a comprehensive lesson plan with 4-7 sections."""
         ],
         "needs_rag": result.needs_rag,
         "needs_figures": result.needs_figures,
-        "figure_requests": [fr.model_dump() for fr in result.figure_requests],
+        "figure_requests": [fr.model_dump() for fr in raw_figure_requests],
         "estimated_duration_minutes": result.estimated_duration_minutes,
     }
 
