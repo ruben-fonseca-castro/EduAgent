@@ -320,9 +320,14 @@
     // ── SSE log ────────────────────────────────────────────────────────────────
     const MAX_LOG_LINES = 8;
     let logLines = [];
-    function appendLog(text, cls = '') {
-      logLines.push({ text, cls });
-      if (logLines.length > MAX_LOG_LINES) logLines.shift();
+    function appendLog(text, cls = '', isToken = false) {
+      if (isToken && logLines.length > 0 && logLines[logLines.length - 1].cls === 'token') {
+          // Append to existing token stream instead of creating new line
+          logLines[logLines.length - 1].text += text;
+      } else {
+          logLines.push({ text, cls });
+          if (logLines.length > MAX_LOG_LINES) logLines.shift();
+      }
       const el = document.getElementById('sse-log');
       el.innerHTML = logLines.map(l => `<div class="log-${l.cls}">${escapeHtml(l.text)}</div>`).join('');
       el.scrollTop = el.scrollHeight;
@@ -396,8 +401,8 @@
           renderPipeline(null, completedNodes);
           appendLog(`✓ ${event.node} (${event.took_ms}ms)`, 'node_end');
         } else if (type === 'token') {
-          // Show a brief snippet of the streaming token
-          appendLog(event.content.substring(0, 60), 'token');
+          // Stream the token continuously
+          appendLog(event.content, 'token', true);
         } else if (type === 'figure_generated') {
           appendLog(`📊 Figure: ${event.title}`, 'figure');
         } else if (type === 'complete') {

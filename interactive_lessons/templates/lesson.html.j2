@@ -267,9 +267,21 @@
     // Embedded figure data (all_figures as JSON)
     const figureData = {{ all_figures | tojson }};
 
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', async function() {
       // Initialize Mermaid
-      mermaid.initialize({ startOnLoad: true, theme: 'default' });
+      mermaid.initialize({ startOnLoad: false, theme: 'default' });
+
+      // Render Mermaid diagrams manually to catch errors
+      const mermaidNodes = document.querySelectorAll('.mermaid');
+      for (let i = 0; i < mermaidNodes.length; i++) {
+        const el = mermaidNodes[i];
+        try {
+          const { svg } = await mermaid.render('mermaid-svg-' + i, el.textContent);
+          el.innerHTML = svg;
+        } catch (e) {
+          el.innerHTML = '<div class="p-4 text-red-500 text-sm">Could not render diagram (syntax error).</div>';
+        }
+      }
 
       // Render Plotly figures
       figureData.forEach(function(fig) {

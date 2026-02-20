@@ -100,30 +100,25 @@ Generate a comprehensive lesson plan with 4-7 sections.
 
     # Extract figure requests from root, or fallback to checking inside sections if Cohere nested them
     raw_figure_requests = result.figure_requests
-    if not raw_figure_requests:
-        for i, sec in enumerate(result.sections):
-            # Check if the parsed Pydantic object unexpectedly contains figure_requests as a dict attribute 
-            # (Pydantic might drop it if strict, so we'll check the raw response if possible... wait, 
-            # if we use response.content / PydanticOutputParser, Extra fields are ignored by default.
-            # Let's adjust state.py to allow extra fields but for now we'll just extract from the parsed result)
-            pass
-            
-    # Actually, if we want to catch nested figure_requests in section dicts we need to let Pydantic model them 
-    # or just parse the JSON manually before Pydantic.
+    
     import json as _json
-    try:
-        raw_json_str = response.content
-        if "```json" in raw_json_str:
-             raw_json_str = raw_json_str.split("```json")[1].split("```")[0].strip()
-        parsed_raw = _json.loads(raw_json_str)
-        if not raw_figure_requests and "sections" in parsed_raw:
-            for i, sec_data in enumerate(parsed_raw["sections"]):
-                if "figure_requests" in sec_data:
-                    for fr in sec_data["figure_requests"]:
-                        fr["section_index"] = i
-                        raw_figure_requests.append(FigureRequest(**fr))
-    except Exception:
-        pass
+    if not raw_figure_requests:
+        try:
+            raw_json_str = response.content
+            if "```json" in raw_json_str:
+                 raw_json_str = raw_json_str.split("```json")[1].split("```")[0].strip()
+            elif "```" in raw_json_str:
+                 raw_json_str = raw_json_str.split("```")[1].split("```")[0].strip()
+                 
+            parsed_raw = _json.loads(raw_json_str)
+            if "sections" in parsed_raw:
+                for i, sec_data in enumerate(parsed_raw["sections"]):
+                    if "figure_requests" in sec_data:
+                        for fr in sec_data["figure_requests"]:
+                            fr["section_index"] = i
+                            raw_figure_requests.append(FigureRequest(**fr))
+        except Exception:
+            pass
 
     # Convert Pydantic model to TypedDict-compatible dict
     lesson_plan: LessonPlan = {
@@ -207,8 +202,8 @@ async def generate_content(state: LessonState) -> dict:
 
     # Build context for the LLM
     student_section = ""
-    if student_context:
-        profile = state.get("student_profile", {})
+    profile = state.get("student_profile", {})
+    if profile or student_context:
         student_section = f"""
 Student Profile:
 - Name: {profile.get('name', 'Unknown')}
@@ -332,13 +327,15 @@ async def generate_figures(state: LessonState) -> dict:
 
     generated_figures: list[GeneratedFigure] = []
 
-    # Try to use MCP tools; fall back to LLM-only if MCP unavailable
     try:
-        from backend.mcp_servers.client import get_mcp_tools
-        mcp_tools = await get_mcp_tools()
+        from backend.mcp_servers.client import get_mcp_client_context
+        ctx = await get_mcp_client_context()
+        mcp_client = await ctx.__aenter__()
+        mcp_tools = mcp_client.get_tools()
         tool_map = {t.name: t for t in mcp_tools}
     except Exception:
         tool_map = {}
+        ctx = None
 
     for i, fig_req in enumerate(figure_requests):
         fig_type = fig_req.get("type", "mathjax")
@@ -361,6 +358,8 @@ async def generate_figures(state: LessonState) -> dict:
                             "section_index": section_index,
                         })
                         continue
+                    else:
+                        print(f"Plotly execution failed: {result.get('error')}", flush=True)
                 # Fallback: store code as-is
                 generated_figures.append({
                     "figure_id": figure_id,
@@ -372,6 +371,13 @@ async def generate_figures(state: LessonState) -> dict:
 
             elif fig_type == "mermaid":
                 syntax = await _generate_mermaid_syntax(llm, description, plan)
+                if "execute_mermaid" in tool_map:
+                    result_str = await tool_map["execute_mermaid"].ainvoke({"mermaid_syntax": syntax})
+                    result = json.loads(result_str) if isinstance(result_str, str) else result_str
+                    if result.get("success"):
+                        syntax = result["mermaid_syntax"]
+                    else:
+                        print(f"Mermaid validation failed: {result.get('error')}", flush=True)
                 generated_figures.append({
                     "figure_id": figure_id,
                     "figure_type": "mermaid",
@@ -400,6 +406,12 @@ async def generate_figures(state: LessonState) -> dict:
                 "section_index": section_index,
             })
 
+    if ctx is not None:
+        try:
+            await ctx.__aexit__(None, None, None)
+        except Exception:
+            pass
+
     return {
         "generated_figures": generated_figures,
         "current_node": "generate_figures",
@@ -408,7 +420,10 @@ async def generate_figures(state: LessonState) -> dict:
 
 
 async def _generate_plotly_code(llm, description: str, plan: dict) -> str:
-    response = await llm.ainvoke([
+    from backend.agent.state import PlotlyFigureSchema
+    structured_llm = llm.with_structured_output(PlotlyFigureSchema)
+
+    response = await structured_llm.ainvoke([
         SystemMessage(content=GENERATE_FIGURES_SYSTEM),
         HumanMessage(content=f"""Write Python code to create an interactive Plotly figure for:
 "{description}"
@@ -416,14 +431,17 @@ async def _generate_plotly_code(llm, description: str, plan: dict) -> str:
 Context: {plan['subject']} lesson for {plan['grade_level']} students.
 
 Requirements:
-- Import plotly.graph_objects as go
+- DO NOT use import statements ('go' for plotly.graph_objects and 'np' for numpy are already available in the environment)
 - Assign the figure to variable 'fig'
-- Make it educational and visually clear
-- Add title, axis labels, and annotations
-
-Return ONLY the Python code, no explanations."""),
+- Generate meaningful simulated data using 'np' (e.g. np.linspace) to plot the actual mathematical or physical relationship described
+- Include proper x-axis and y-axis labels (with units if applicable) and an informative title
+- Make it educational and visually clear""")
     ])
-    code = response.content.strip()
+    
+    if not response:
+        return ""
+        
+    code = response.code.strip()
     if "```python" in code:
         code = code.split("```python")[1].split("```")[0].strip()
     elif "```" in code:
@@ -432,16 +450,28 @@ Return ONLY the Python code, no explanations."""),
 
 
 async def _generate_mermaid_syntax(llm, description: str, plan: dict) -> str:
-    response = await llm.ainvoke([
+    from backend.agent.state import MermaidFigureSchema
+    structured_llm = llm.with_structured_output(MermaidFigureSchema)
+
+    response = await structured_llm.ainvoke([
         SystemMessage(content=GENERATE_FIGURES_SYSTEM),
         HumanMessage(content=f"""Create a Mermaid diagram for:
 "{description}"
 
 Context: {plan['subject']} lesson for {plan['grade_level']} students.
 
-Return ONLY valid Mermaid syntax, no explanations or code blocks."""),
+Requirements:
+- You MUST only use `flowchart` or `graph` diagram types (e.g. `flowchart TD` or `flowchart LR`).
+- DO NOT use `classDiagram`, `stateDiagram`, `sequenceDiagram`, or any other complex syntax.
+- Use simple, well-supported Mermaid features to avoid syntax errors.
+- CRITICAL: Quote node labels containing special characters like parentheses, commas, or brackets. For example, use `id["Label (Extra Info)"]` instead of `id[Label (Extra Info)]`.
+- Avoid HTML tags in labels.""")
     ])
-    syntax = response.content.strip()
+    
+    if not response:
+        return ""
+        
+    syntax = response.syntax.strip()
     if "```mermaid" in syntax:
         syntax = syntax.split("```mermaid")[1].split("```")[0].strip()
     elif "```" in syntax:

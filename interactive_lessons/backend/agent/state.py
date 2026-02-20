@@ -10,6 +10,14 @@ from typing_extensions import TypedDict
 
 # ── Pydantic models (for structured LLM output) ───────────────────────────────
 
+class PlotlyFigureSchema(BaseModel):
+    """Schema for a generated Plotly figure."""
+    code: str = Field(description="Python code to create a plotly.graph_objects Figure assigned to variable 'fig'")
+
+class MermaidFigureSchema(BaseModel):
+    """Schema for a generated Mermaid diagram."""
+    syntax: str = Field(description="The valid mermaid syntax string without markdown formatting or codeblocks")
+
 class LessonSectionSchema(BaseModel):
     """Schema for a single section within a lesson plan. This must be a JSON object, not a string."""
     title: str
@@ -33,7 +41,7 @@ class LessonPlanSchema(BaseModel):
     sections: list[LessonSectionSchema]
     needs_rag: bool
     needs_figures: bool
-    figure_requests: list[FigureRequest] = Field(default_factory=list)
+    figure_requests: list[FigureRequest]
     estimated_duration_minutes: int
 
 

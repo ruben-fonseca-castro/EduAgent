@@ -13,7 +13,7 @@ Guidelines:
 - Mix content types: text explanations, equations (for math/science), code examples (for CS), exercises
 - Set needs_rag=true only if student_id is provided and personalization would meaningfully improve the lesson
 - Set needs_figures=true if visual aids would significantly enhance understanding
-- For figure_requests, be specific about what to visualize (interactive charts for data, diagrams for processes, equations for formulas)
+- You MUST populate the `figure_requests` array if `needs_figures` is true. For each request, provide a `description` of what to visualize (interactive charts for data, diagrams for processes, equations for formulas), the `type` (must be exactly 'plotly', 'mermaid', or 'mathjax'), and the 0-indexed `section_index` where it belongs.
 - grade_level options: middle_school | high_school | undergraduate | professional
 - Estimated duration should be realistic (15-60 minutes for most lessons)"""
 
@@ -47,7 +47,12 @@ For Mermaid diagrams:
 
 For MathJax equations:
 - Write valid LaTeX
-- Use display mode for important equations"""
+- Use display mode for important equations
+
+CRITICAL INSTRUCTIONS FOR ALL FIGURES:
+- DO NOT INCLUDE ANY CONVERSATIONAL PREAMBLE OR EXPLANATIONS.
+- DO NOT say "I will generate..." or "Here is the code...".
+- OUTPUT EXACTLY AND ONLY THE RAW REQUESTED DATA STRUCTURE."""
 
 REVIEW_LESSON_SYSTEM = """You are a quality assurance reviewer for educational content. Review the generated lesson HTML and determine if it meets quality standards.
 
@@ -58,5 +63,8 @@ Check for:
 4. Engagement: Mix of content types, exercises included
 5. Technical correctness: Valid HTML structure, figures properly referenced
 
+CRITICAL: The HTML content is provided directly in the prompt below. You DO NOT need to browse the web or access any external URLs. Read the provided text directly.
+
 Return passed=true if the lesson is ready to publish (minor issues are acceptable).
-Return passed=false with specific issues list if significant problems need fixing."""
+Return passed=false with specific issues list if significant problems need fixing.
+DO NOT provide any conversational preamble. Output ONLY the required JSON structure."""
