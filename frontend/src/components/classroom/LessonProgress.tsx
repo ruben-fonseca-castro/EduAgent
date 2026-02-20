@@ -26,56 +26,49 @@ export function LessonProgress({ lessonId, token, onComplete, onError }: LessonP
   const [message, setMessage] = useState("Initializing lesson generation...");
   const [planTitle, setPlanTitle] = useState("");
   const [objectives, setObjectives] = useState<string[]>([]);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const nodeIndexRef = useRef(0);
 
   useEffect(() => {
-    const url = `${lessons.streamUrl(lessonId)}?token=${token}`;
-    const es = new EventSource(url);
-    eventSourceRef.current = es;
+    let cancelled = false;
 
-    es.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        const evt = data.event || data.type;
-
-        if (evt === "status") {
-          setCurrentNode(data.data?.node || "");
-          setMessage(data.data?.message || "");
-        } else if (evt === "plan") {
-          setPlanTitle(data.data?.title || "");
-          setObjectives(data.data?.objectives || []);
-        } else if (evt === "complete") {
-          es.close();
-          onComplete();
-        } else if (evt === "error") {
-          es.close();
-          onError(data.data?.message || "Generation failed");
+    // Simulate progress by advancing through nodes while we poll
+    const simulateProgress = () => {
+      const nodes = PIPELINE_NODES;
+      if (nodeIndexRef.current < nodes.length - 1) {
+        nodeIndexRef.current += 1;
+        if (!cancelled) {
+          setCurrentNode(nodes[nodeIndexRef.current].key);
+          setMessage(nodes[nodeIndexRef.current].label + "...");
         }
-      } catch {
-        // Ignore parse errors
       }
     };
 
-    es.onerror = () => {
-      // SSE might disconnect — check lesson status directly
-      setTimeout(async () => {
-        try {
-          const lesson = await lessons.get(token, lessonId);
-          if (lesson.status === "ready") {
-            es.close();
-            onComplete();
-          } else if (lesson.status === "error") {
-            es.close();
-            onError(lesson.error_message || "Generation failed");
-          }
-        } catch {
-          // Retry will happen on next onerror
+    // Advance the progress indicator every 8 seconds
+    const progressTimer = setInterval(simulateProgress, 8000);
+
+    // Poll the lesson status every 3 seconds
+    pollingRef.current = setInterval(async () => {
+      if (cancelled) return;
+      try {
+        const lesson = await lessons.get(token, lessonId);
+        if (lesson.status === "ready") {
+          if (!cancelled) onComplete();
+          cancelled = true;
+        } else if (lesson.status === "error") {
+          if (!cancelled) onError(lesson.error_message || "Generation failed");
+          cancelled = true;
         }
-      }, 2000);
-    };
+        // If still generating, keep polling
+      } catch {
+        // Network error — keep polling
+      }
+    }, 3000);
 
     return () => {
-      es.close();
+      cancelled = true;
+      clearInterval(progressTimer);
+      if (pollingRef.current) clearInterval(pollingRef.current);
     };
   }, [lessonId, token, onComplete, onError]);
 
